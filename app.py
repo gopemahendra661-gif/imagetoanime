@@ -1,57 +1,76 @@
-# app.py
-import streamlit as st
-from utils import read_image, pil_from_array, basic_cartoon, smooth_cartoon, image_to_bytes
+from flask import Flask, render_template, request, send_file, url_for
+import cv2
+import numpy as np
 from PIL import Image
+import io
 import os
 
-st.set_page_config(page_title="Cartoonify (Streamlit)", layout="centered")
+app = Flask(__name__)
+app.config['UPLOAD_FOLDER'] = 'static/uploads'
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max
 
-st.title("🖼️ Image → Cartoon (Streamlit)")
-st.markdown("Upload an image and convert it to a cartoon. No external API required.")
+# Create uploads directory if not exists
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-uploaded = st.file_uploader("Choose an image (jpg / png)", type=["jpg", "jpeg", "png"])
+def convert_to_cartoon(image_path, output_path):
+    # Read image
+    img = cv2.imread(image_path)
+    
+    # 1. Convert to grayscale
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    
+    # 2. Apply median blur to reduce noise
+    gray = cv2.medianBlur(gray, 5)
+    
+    # 3. Detect edges using adaptive threshold
+    edges = cv2.adaptiveThreshold(gray, 255,
+                                  cv2.ADAPTIVE_THRESH_MEAN_C,
+                                  cv2.THRESH_BINARY, 9, 9)
+    
+    # 4. Apply bilateral filter for color smoothing
+    color = cv2.bilateralFilter(img, 9, 300, 300)
+    
+    # 5. Combine edges with color image
+    cartoon = cv2.bitwise_and(color, color, mask=edges)
+    
+    # Save cartoon image
+    cv2.imwrite(output_path, cartoon)
+    
+    return output_path
 
-mode = st.selectbox("Choose mode", ["Basic Cartoon (fast)", "Smooth Cartoon", "AnimeGAN2 (optional)"])
+@app.route('/')
+def index():
+    return render_template('index.html')
 
-col1, col2 = st.columns(2)
+@app.route('/upload', methods=['POST'])
+def upload_image():
+    if 'file' not in request.files:
+        return 'No file uploaded', 400
+    
+    file = request.files['file']
+    
+    if file.filename == '':
+        return 'No file selected', 400
+    
+    if file:
+        # Save uploaded file
+        input_path = os.path.join(app.config['UPLOAD_FOLDER'], 'input.jpg')
+        output_path = os.path.join(app.config['UPLOAD_FOLDER'], 'cartoon_output.jpg')
+        
+        file.save(input_path)
+        
+        # Convert to cartoon
+        cartoon_path = convert_to_cartoon(input_path, output_path)
+        
+        return render_template('result.html', 
+                             original=url_for('static', filename='uploads/input.jpg'),
+                             cartoon=url_for('static', filename='uploads/cartoon_output.jpg'))
 
-if uploaded is not None:
-    img_np = read_image(uploaded)
-    with col1:
-        st.subheader("Original")
-        st.image(img_np, use_column_width=True)
+@app.route('/download')
+def download_image():
+    return send_file('static/uploads/cartoon_output.jpg', 
+                     as_attachment=True, 
+                     download_name='cartoon_image.jpg')
 
-    process_btn = st.button("Convert Image")
-
-    if process_btn:
-        with st.spinner("Processing..."):
-            if mode == "Basic Cartoon (fast)":
-                out_np = basic_cartoon(img_np)
-            elif mode == "Smooth Cartoon":
-                out_np = smooth_cartoon(img_np)
-            else:
-                # AnimeGAN2 path (optional)
-                st.info("AnimeGAN2 mode requires a local model file at /models/animegan2.pth and PyTorch installed.")
-                model_path = os.path.join("models", "animegan2.pth")
-                if os.path.exists(model_path):
-                    try:
-                        import torch
-                        # Minimal placeholder: user must provide a proper inference function
-                        st.warning("Detected model file, but this app includes a placeholder anime-step — replace with your AnimeGAN2 inference code.")
-                        # For now fall back to smooth_cartoon to avoid crash
-                        out_np = smooth_cartoon(img_np)
-                    except Exception as e:
-                        st.error("PyTorch not installed in environment. Install torch to use AnimeGAN2.")
-                        out_np = smooth_cartoon(img_np)
-                else:
-                    st.error("AnimeGAN2 model not found in /models/animegan2.pth. Using Smooth Cartoon instead.")
-                    out_np = smooth_cartoon(img_np)
-
-        with col2:
-            st.subheader("Result")
-            st.image(out_np, use_column_width=True)
-            pil_out = pil_from_array(out_np)
-            bytes_io = image_to_bytes(pil_out, fmt="JPEG")
-            st.download_button("⬇️ Download Result", data=bytes_io, file_name="cartoon.jpg", mime="image/jpeg")
-else:
-    st.info("Upload an image to begin. Example images work best with faces or simple scenes.")
+if __name__ == '__main__':
+    app.run(debug=True)
