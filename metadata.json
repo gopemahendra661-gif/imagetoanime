@@ -1,0 +1,8 @@
+{
+  "name": "AI SEO Automation Panel",
+  "description": "Autonomous Programmatic SEO engine that automatically researches keywords, generates high-quality tools / landing pages, and compiles structural sitemaps and GitHub deployments.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
