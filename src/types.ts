@@ -29,6 +29,10 @@ export interface SEOPage {
   useCases: UseCaseItem[];
   examples: ExamplePattern[];
   relatedTools: string[];
+  detailedContent?: {
+    heading: string;
+    paragraphs: string[];
+  }[];
   schemaMarkup: any; // JSON-LD schema
   category: string;
   canonicalUrl: string;
@@ -68,3 +72,15 @@ export interface AutomationStatus {
   totalKeywordsTracked: number;
   engineStatus: "Active" | "Idle" | "Error";
 }
+
+export interface ToolGap {
+  keyword: string;
+  slug: string;
+  category: string;
+  difficulty: number;
+  searchVolumeEstimate: number;
+  reason: string;
+  priority: "High" | "Medium" | "Low";
+  intent: string;
+}
+

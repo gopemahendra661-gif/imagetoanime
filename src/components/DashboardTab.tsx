@@ -6,7 +6,8 @@
 import React, { useState, useEffect } from "react";
 import { 
   FileText, LogOut, CheckCircle, RefreshCw, AlertTriangle, 
-  Trash2, Search, ExternalLink, Play, Clock, Database, Trash, Eye
+  Trash2, Search, ExternalLink, Play, Clock, Database, Trash, Eye,
+  HeartPulse, Activity
 } from "lucide-react";
 import { SEOPage, AutomationLog } from "../types";
 
@@ -20,6 +21,7 @@ interface DashboardTabProps {
   onClearLogs: () => void;
   onSelectPreview: (slug: string) => void;
   isProcessing: boolean;
+  getAuthHeaders: (tokenOverride?: string | null) => Record<string, string>;
 }
 
 export default function DashboardTab({
@@ -31,10 +33,83 @@ export default function DashboardTab({
   onDeletePage,
   onClearLogs,
   onSelectPreview,
-  isProcessing
+  isProcessing,
+  getAuthHeaders
 }: DashboardTabProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterCategory, setFilterCategory] = useState("All");
+
+  // Link diagnostics states
+  const [auditResult, setAuditResult] = useState<any>(null);
+  const [isAuditing, setIsAuditing] = useState(false);
+  const [isRepairing, setIsRepairing] = useState(false);
+  const [repairMessage, setRepairMessage] = useState<string | null>(null);
+
+  const fetchWithRetry = async (url: string, options: RequestInit = {}, retries = 3, delay = 1000): Promise<Response> => {
+    try {
+      const res = await fetch(url, options);
+      if (!res.ok && [502, 503, 504].includes(res.status) && retries > 0) {
+        console.warn(`Fetch returned ${res.status} for ${url}. Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return fetchWithRetry(url, options, retries - 1, delay * 2);
+      }
+      return res;
+    } catch (err: any) {
+      if (retries > 0) {
+        console.warn(`Fetch connection failed for ${url}. Retrying in ${delay}ms...`, err);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return fetchWithRetry(url, options, retries - 1, delay * 2);
+      }
+      throw err;
+    }
+  };
+
+  const fetchAudit = async (silent = false) => {
+    if (!silent) setIsAuditing(true);
+    try {
+      const res = await fetchWithRetry("/api/links/audit", {
+        headers: getAuthHeaders()
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setAuditResult(data);
+        }
+      }
+    } catch (err) {
+      console.error("Link diagnostics failed:", err);
+    } finally {
+      if (!silent) setIsAuditing(false);
+    }
+  };
+
+  const handleSelfHeal = async () => {
+    setIsRepairing(true);
+    setRepairMessage(null);
+    try {
+      const res = await fetch("/api/links/repair", {
+        method: "POST",
+        headers: getAuthHeaders()
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setRepairMessage(data.message);
+        onRefreshPages();
+        await fetchAudit(true);
+      } else {
+        setRepairMessage(data.message || "Repair routine encountered an error.");
+      }
+    } catch (err: any) {
+      setRepairMessage(`Repair request failed: ${err.message}`);
+    } finally {
+      setIsRepairing(false);
+    }
+  };
+
+  useEffect(() => {
+    // Audit link integrity on tab load and when pages change
+    fetchAudit(true);
+  }, [pages]);
 
   useEffect(() => {
     // Poll logs and pages when mounted
@@ -122,6 +197,125 @@ export default function DashboardTab({
         </div>
       </div>
 
+      {/* Related Tools Link Integrity & Companion Audit Matrix */}
+      <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6 space-y-4" id="link_integrity_matrix_panel">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 bg-cyan-500/10 rounded text-cyan-400">
+                <HeartPulse size={16} />
+              </span>
+              <h2 className="text-base font-semibold text-white tracking-tight">सम्बन्धित टूल्स लिंक स्वास्थ्य और स्व-उपचार प्रणाली (Link Integrity Matrix)</h2>
+            </div>
+            <p className="text-zinc-500 text-xs mt-1">
+              यह मॉड्यूल सभी SEO लैंडिंग पेजों के <strong>relatedTools</strong> लिंक्स का लाइव ऑडिट करता है। यदि कोई लिंक Texly पर सक्रिय नहीं है, तो वह स्वतः हट जाता है।
+            </p>
+          </div>
+
+          <div className="flex gap-2 w-full sm:w-auto shrink-0 select-none">
+            <button
+              onClick={() => fetchAudit(false)}
+              disabled={isAuditing || isRepairing}
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white rounded-lg border border-zinc-700 text-xs font-semibold cursor-pointer select-none transition disabled:opacity-40"
+            >
+              <RefreshCw size={12} className={isAuditing ? "animate-spin" : ""} />
+              {isAuditing ? "जांच हो रही है..." : "मैन्युअल स्कैन (Scan Links)"}
+            </button>
+            <button
+              onClick={handleSelfHeal}
+              disabled={isAuditing || isRepairing}
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 border border-transparent disabled:bg-zinc-805 disabled:text-zinc-500 text-zinc-950 rounded-lg text-xs font-bold cursor-pointer select-none transition disabled:opacity-30"
+            >
+              <Activity size={12} className={isRepairing ? "animate-pulse" : ""} />
+              {isRepairing ? "स्व-उपचार चालू है..." : "ऑटो-डिलीट व स्व-उपचार (Self-Heal)"}
+            </button>
+          </div>
+        </div>
+
+        {/* Diagnostic Metrics Display */}
+        {auditResult ? (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border border-zinc-800/60 rounded-lg p-4 bg-zinc-950/40">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-zinc-900 rounded border border-zinc-800 text-zinc-400 shrink-0">
+                <FileText size={18} />
+              </div>
+              <div>
+                <span className="text-[10px] text-zinc-500 block uppercase font-mono">Scanned Nodes</span>
+                <span className="text-sm font-bold text-zinc-100 block">{auditResult.scannedPagesCount} Pages</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-emerald-500/10 rounded border border-emerald-500/20 text-emerald-400 shrink-0">
+                <CheckCircle size={18} />
+              </div>
+              <div>
+                <span className="text-[10px] text-emerald-500 block uppercase font-mono">Working Links (सक्रिय)</span>
+                <span className="text-sm font-bold text-emerald-400 block">{auditResult.workingCount} Links Active</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className={`p-2.5 rounded border shrink-0 ${
+                auditResult.brokenCount > 0 
+                  ? "bg-red-500/10 border-red-500/20 text-red-100 animated-pulse" 
+                  : "bg-cyan-500/10 border-cyan-500/20 text-cyan-400"
+              }`}>
+                <AlertTriangle size={18} />
+              </div>
+              <div>
+                <span className="text-[10px] text-zinc-500 block uppercase font-mono">Broken Links (मृत कड़ी)</span>
+                <span className={`text-sm font-bold block ${auditResult.brokenCount > 0 ? "text-red-400" : "text-cyan-400"}`}>
+                  {auditResult.brokenCount} Missing Tools
+                </span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="text-center py-4 text-xs text-zinc-500 font-mono animate-pulse">
+            लिंक स्कैन स्टेटस डेटा लोड हो रहा है... (Syncing Links Audit Matrix)
+          </div>
+        )}
+
+        {/* Repair message notification feedback */}
+        {repairMessage && (
+          <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-400 text-xs">
+            <strong>सिस्टम फीडबैक:</strong> {repairMessage}
+          </div>
+        )}
+
+        {/* Detailed Broken Link Alerts & Information List */}
+        {auditResult && auditResult.brokenCount > 0 && (
+          <div className="space-y-2 border border-red-500/20 rounded-lg p-4 bg-red-500/5">
+            <div className="flex items-center gap-2 text-red-400 text-xs font-bold">
+              <AlertTriangle size={14} />
+              <span>निम्नलिखित टूटे हुए या अमान्य लिंक्स का पता चला है (Automatic deletion recommended):</span>
+            </div>
+            <div className="max-h-[160px] overflow-y-auto space-y-1.5 scrollbar-thin text-xs text-zinc-400 font-mono pr-2">
+              {auditResult.brokenLinks.map((link: any, idx: number) => (
+                <div key={idx} className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center bg-zinc-900/60 p-2 rounded border border-zinc-800/40 gap-1 sm:gap-4">
+                  <div>
+                    <span className="text-zinc-500">From Page:</span> <strong className="text-zinc-300">/{link.sourceSlug}</strong>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-zinc-500">Broken Link Pointing To:</span>
+                    <strong className="text-red-400 font-semibold bg-red-500/10 px-1.5 py-0.5 rounded border border-red-500/20">/{link.targetSlug}</strong>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* All links healthy visual */}
+        {auditResult && auditResult.brokenCount === 0 && (
+          <div className="p-3 bg-emerald-500/5 border border-emerald-500/10 rounded-lg text-emerald-400/80 text-xs flex items-center gap-2">
+            <CheckCircle size={14} className="text-emerald-400" />
+            <span>इंटीग्रिटी बिल्कुल सही है! डेटाबेेस में मौजूद सभी companion tools लिंक्स 100% वर्किंग और सक्रिय हैं।</span>
+          </div>
+        )}
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Generated Landing Pages List */}
         <div className="lg:col-span-8 bg-zinc-900/50 border border-zinc-800 rounded-xl p-6 space-y-4" id="table_section">
@@ -203,7 +397,7 @@ export default function DashboardTab({
                             <Eye size={14} />
                           </button>
                           <a 
-                            href={`https://www.texlyonline.in/${page.slug}`}
+                            href={page.canonicalUrl || `https://www.texlyonline.in/seo/${page.slug}`}
                             target="_blank"
                             rel="noreferrer"
                             className="p-1.5 text-zinc-500 hover:text-white bg-zinc-850 hover:bg-zinc-800 rounded transition"

@@ -47,3 +47,188 @@
   transform: rotate(180deg);
   transition: transform 0.4s ease-out;
 }
+
+/* ==========================================
+   PRISTINE LIGHT MODE VALUE OVERRIDES
+   ========================================== */
+.light {
+  background-color: #f8fafc !important; /* slate-50 */
+  color: #0f172a !important; /* slate-900 */
+}
+
+/* Layouts & Containers */
+.light .bg-\[\#07070a\],
+.light .bg-\[\#030305\],
+.light .bg-zinc-950,
+.light .bg-black {
+  background-color: #f8fafc !important;
+}
+
+/* Sidebar & Headers & Drawers */
+.light aside,
+.light header,
+.light .bg-\[\#0c0c12\],
+.light .bg-\[\#050508\],
+.light .bg-\[\#09090e\],
+.light #mobile_header,
+.light #mobile_drawer {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+/* Cards & Panels */
+.light .bg-zinc-900,
+.light .bg-zinc-850,
+.light .bg-zinc-800,
+.light .bg-\[\#0e0e16\],
+.light .bg-\[\#0c0c12\]\/95 {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05) !important;
+}
+
+/* Highlight / Info Panel Boxes */
+.light .bg-cyan-500\/5,
+.light .bg-cyan-950\/20,
+.light .bg-zinc-900\/50,
+.light .bg-zinc-950\/40 {
+  background-color: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* Micro Live Indicators */
+.light .bg-emerald-500\/10,
+.light .bg-amber-500\/10 {
+  background-color: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* Borders */
+.light .border-zinc-900,
+.light .border-zinc-850,
+.light .border-zinc-805,
+.light .border-zinc-800,
+.light .border-zinc-700,
+.light .border-zinc-855 {
+  border-color: #e2e8f0 !important;
+}
+
+/* Typography Overrides */
+.light h1,
+.light h2,
+.light h3,
+.light h4,
+.light .text-white {
+  color: #0f172a !important; /* slate-900 */
+}
+
+.light .text-zinc-100,
+.light .text-zinc-200,
+.light .text-zinc-300,
+.light .text-zinc-350 {
+  color: #1e293b !important; /* slate-800 */
+}
+
+.light .text-zinc-400,
+.light .text-zinc-450 {
+  color: #475569 !important; /* slate-600 */
+}
+
+.light .text-zinc-500,
+.light .text-zinc-550,
+.light .text-zinc-600,
+.light .text-zinc-650 {
+  color: #64748b !important; /* slate-500 */
+}
+
+/* Links & Cyan Highlights */
+.light .text-cyan-400,
+.light .text-cyan-300,
+.light .text-cyan-500 {
+  color: #0891b2 !important; /* High contrast Cyan-600 for optimal accessibility */
+}
+
+.light .hover\:text-cyan-400:hover,
+.light .hover\:text-cyan-300:hover {
+  color: #0e7490 !important; /* cyan-700 */
+}
+
+/* Tab Navigation Buttons */
+.light .bg-zinc-900.border.border-zinc-800.text-white {
+  background-color: #f1f5f9 !important; /* slate-100 */
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+.light nav button:not(.bg-zinc-900):hover {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+/* Form Controls and Inputs */
+.light input,
+.light textarea,
+.light select,
+.light .bg-\[\#050508\] {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+.light input::placeholder,
+.light textarea::placeholder {
+  color: #94a3b8 !important; /* slate-400 */
+}
+
+.light input:focus,
+.light textarea:focus {
+  border-color: #0891b2 !important;
+  box-shadow: 0 0 0 2px rgba(8, 145, 178, 0.1) !important;
+}
+
+/* Log Terminals (Keep dark or high contrast crisp light style?) */
+.light .bg-black\/50,
+.light .bg-zinc-950\/90,
+.light .font-mono.bg-black {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+.light .text-emerald-400 {
+  color: #15803d !important; /* green-700 */
+}
+
+.light .text-amber-400 {
+  color: #b45309 !important; /* amber-700 */
+}
+
+.light .text-rose-400 {
+  color: #be123c !important; /* rose-700 */
+}
+
+.light .bg-zinc-900\/60 {
+  background-color: #e2e8f0 !important;
+  color: #334155 !important;
+}
+
+/* Custom light mode scrollbars */
+.light .scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #cbd5e1 !important;
+}
+
+.light .scrollbar-thin::-webkit-scrollbar-track {
+  background: #f1f5f9 !important;
+}
+
+.light .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8 !important;
+}
+
+/* Code Sandbox elements */
+.light .bg-zinc-950\/50 {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+}
+

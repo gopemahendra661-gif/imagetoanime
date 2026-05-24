@@ -6,7 +6,8 @@
 import React, { useState, useEffect } from "react";
 import { 
   Sparkles, Copy, Check, Info, ArrowRight, HelpCircle, 
-  ChevronDown, MessageSquare, Play, RefreshCw, FileText, Globe
+  ChevronDown, MessageSquare, Play, RefreshCw, FileText, Globe,
+  Plus, Link
 } from "lucide-react";
 import { SEOPage } from "../types";
 
@@ -14,20 +15,40 @@ interface PreviewTabProps {
   pages: SEOPage[];
   initialSlug?: string;
   onNavigateToTab?: (tab: "dashboard" | "keyword" | "content" | "sandbox" | "exporter" | "config") => void;
+  slugToUrlMap?: Record<string, string>;
+  onUpdateSlugToUrlMap?: (newMap: Record<string, string>) => void;
+  getAuthHeaders?: () => Record<string, string>;
 }
 
-export default function PreviewTab({ pages, initialSlug, onNavigateToTab }: PreviewTabProps) {
+export default function PreviewTab({ 
+  pages, 
+  initialSlug, 
+  onNavigateToTab, 
+  slugToUrlMap, 
+  onUpdateSlugToUrlMap,
+  getAuthHeaders
+}: PreviewTabProps) {
   // Available pages to preview
   const [selectedSlug, setSelectedSlug] = useState<string>("");
   const [inputText, setInputText] = useState<string>("");
   const [outputText, setOutputText] = useState<string>("");
   const [copied, setCopied] = useState<boolean>(false);
+  const [copiedSchema, setCopiedSchema] = useState<boolean>(false);
   const [expandedFaqs, setExpandedFaqs] = useState<Record<number, boolean>>({});
 
   // Dynamic state based on tool requirements
   const [caseMode, setCaseMode] = useState<"lower" | "upper" | "title" | "sentence">("lower");
   const [whitespaceMode, setWhitespaceMode] = useState<"collapse" | "strip-all" | "trim-lines">("collapse");
   const [keepPunctuation, setKeepPunctuation] = useState<boolean>(true);
+
+  // Manual / Automatic Real Link Manager state variables
+  const [showLinkManager, setShowLinkManager] = useState<boolean>(false);
+  const [isSyncingSitemap, setIsSyncingSitemap] = useState<boolean>(false);
+  const [isSavingManualLink, setIsSavingManualLink] = useState<boolean>(false);
+  const [manualSlug, setManualSlug] = useState<string>("");
+  const [manualUrl, setManualUrl] = useState<string>("");
+  const [sitemapSyncResult, setSitemapSyncResult] = useState<string | null>(null);
+  const [manualSaveResult, setManualSaveResult] = useState<string | null>(null);
 
   // Set initial selected slug
   useEffect(() => {
@@ -37,6 +58,14 @@ export default function PreviewTab({ pages, initialSlug, onNavigateToTab }: Prev
       setSelectedSlug(pages[0].slug);
     }
   }, [initialSlug, pages]);
+
+  // Synchronize manual form state with selected slug and available mapped URL
+  useEffect(() => {
+    if (selectedSlug) {
+      setManualSlug(selectedSlug);
+      setManualUrl(slugToUrlMap?.[selectedSlug] || `https://www.texlyonline.in/seo/${selectedSlug}`);
+    }
+  }, [selectedSlug, slugToUrlMap]);
 
   // Load sample input on page change
   const currentPage = pages.find((p) => p.slug === selectedSlug);
@@ -69,6 +98,94 @@ export default function PreviewTab({ pages, initialSlug, onNavigateToTab }: Prev
     navigator.clipboard.writeText(outputText || inputText);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
+  };
+
+  const handleSyncSitemap = async () => {
+    setIsSyncingSitemap(true);
+    setSitemapSyncResult(null);
+    try {
+      const headers = getAuthHeaders ? getAuthHeaders() : {};
+      const res = await fetch("/api/sitemap/slugs", { headers });
+      const data = await res.json();
+      if (data.success) {
+        if (onUpdateSlugToUrlMap && data.slugToUrlMap) {
+          onUpdateSlugToUrlMap(data.slugToUrlMap);
+        }
+        setSitemapSyncResult(`सफलतापूर्वक सिंक किया गया! लाइव साईटमैप से ${Object.keys(data.slugToUrlMap || {}).length} लिंक्स को ऑटो-अपडेट किया गया है।`);
+      } else {
+        setSitemapSyncResult(`त्रुटि: ${data.message || "सिंक करने में विफल"}`);
+      }
+    } catch (err: any) {
+      setSitemapSyncResult(`नेटवर्क त्रुटि: ${err.message}`);
+    } finally {
+      setIsSyncingSitemap(false);
+      setTimeout(() => setSitemapSyncResult(null), 8000);
+    }
+  };
+
+  const handleSaveManualLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualSlug || !manualUrl) {
+      setManualSaveResult("Slug और URL दोनों आवश्यक हैं।");
+      return;
+    }
+    setIsSavingManualLink(true);
+    setManualSaveResult(null);
+    try {
+      const headers = getAuthHeaders ? getAuthHeaders() : {};
+      const res = await fetch("/api/sitemap/save-link", {
+        method: "POST",
+        headers: {
+          ...headers,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ slug: manualSlug, url: manualUrl })
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (onUpdateSlugToUrlMap && data.slugToUrlMap) {
+          onUpdateSlugToUrlMap(data.slugToUrlMap);
+        }
+        setManualSaveResult("लिंक सफलतापूर्वक सहेज कर मास्टर डेटाबेस में सुरक्षित सिंक कर दिया गया है!");
+      } else {
+        setManualSaveResult(`त्रुटि: ${data.message || "लिंक सहेजने में विफल"}`);
+      }
+    } catch (err: any) {
+      setManualSaveResult(`नेटवर्क त्रुटि: ${err.message}`);
+    } finally {
+      setIsSavingManualLink(false);
+      setTimeout(() => setManualSaveResult(null), 8000);
+    }
+  };
+
+  const handleDeleteLink = async (slugToDelete: string) => {
+    if (!confirm(`क्या आप वाकई स्लग /${slugToDelete} की लिंक मैपिंग को डिलीट करना चाहते हैं?`)) {
+      return;
+    }
+    try {
+      const headers = getAuthHeaders ? getAuthHeaders() : {};
+      const res = await fetch("/api/sitemap/delete-link", {
+        method: "POST",
+        headers: {
+          ...headers,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ slug: slugToDelete })
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (onUpdateSlugToUrlMap && data.slugToUrlMap) {
+          onUpdateSlugToUrlMap(data.slugToUrlMap);
+        }
+        setManualSaveResult(`स्लग /${slugToDelete} का लिंक सफलतापूर्वक डिलीट कर दिया गया है!`);
+      } else {
+        setManualSaveResult(`त्रुटि: ${data.message || "लिंक डिलीट करने में विफल"}`);
+      }
+    } catch (err: any) {
+      setManualSaveResult(`नेटवर्क त्रुटि: ${err.message}`);
+    } finally {
+      setTimeout(() => setManualSaveResult(null), 8000);
+    }
   };
 
   const toggleFaq = (index: number) => {
@@ -150,7 +267,7 @@ export default function PreviewTab({ pages, initialSlug, onNavigateToTab }: Prev
   }
 
   return (
-    <div className="space-y-6" id="preview_tab">
+    <div className="space-y-6 w-full max-w-full overflow-hidden" id="preview_tab">
       
       {/* Target Selector Toolbar */}
       <div className="bg-[#0c0c12] border border-zinc-850 p-4 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -162,18 +279,146 @@ export default function PreviewTab({ pages, initialSlug, onNavigateToTab }: Prev
           </div>
         </div>
 
-        <select
-          value={selectedSlug}
-          onChange={(e) => setSelectedSlug(e.target.value)}
-          className="w-full sm:w-80 px-4 py-2 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-sm text-zinc-350 focus:text-white rounded-lg outline-none cursor-pointer"
-        >
-          {pages.map((p) => (
-            <option key={p.slug} value={p.slug}>
-              /{p.slug} — {p.category || "Text Tool"}
-            </option>
-          ))}
-        </select>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
+          <select
+            value={selectedSlug}
+            onChange={(e) => setSelectedSlug(e.target.value)}
+            className="w-full sm:w-72 px-4 py-2 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-sm text-zinc-350 focus:text-white rounded-lg outline-none cursor-pointer"
+          >
+            {pages.map((p) => (
+              <option key={p.slug} value={p.slug}>
+                /{p.slug} — {p.category || "Text Tool"}
+              </option>
+            ))}
+          </select>
+
+          <button
+            onClick={() => setShowLinkManager(!showLinkManager)}
+            className={`px-4 py-2 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 whitespace-nowrap ${showLinkManager ? "bg-cyan-500 text-zinc-950 hover:bg-cyan-400" : "bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700 hover:border-zinc-600"}`}
+          >
+            <Link size={13} />
+            <span>लिंक्स प्रबंधित करें (URLs)</span>
+          </button>
+        </div>
       </div>
+
+      {showLinkManager && (
+        <div className="bg-[#0b0b10] border border-zinc-800/80 p-5 rounded-xl space-y-4 animate-fade-in transition-all duration-300">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-zinc-850">
+            <div>
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <Globe size={15} className="text-cyan-400" />
+                <span>लाइव साईटमैप और रियल प्रामाणिक यूआरएल (Real URLs Map)</span>
+              </h3>
+              <p className="text-zinc-550 text-[11px] mt-0.5">
+                यहाँ से आप प्रत्येक SEO पेजेस के असली डोमेन लिंक को स्वचालित रूप से लोड कर सकते हैं या मैन्युअल रूप से सहेज सकते हैं।
+              </p>
+            </div>
+            
+            <button
+              onClick={handleSyncSitemap}
+              disabled={isSyncingSitemap}
+              className="px-4 py-2 bg-[#0ea5e9]/10 text-cyan-400 hover:bg-[#0ea5e9]/20 font-bold text-xs rounded-lg transition border border-cyan-500/20 disabled:opacity-50 flex items-center gap-1.5 self-stretch sm:self-auto justify-center"
+            >
+              <RefreshCw size={12} className={isSyncingSitemap ? "animate-spin" : ""} />
+              <span>{isSyncingSitemap ? "सिंक हो रहा है..." : "स्वचालित सिंक (Crawl Live Site)"}</span>
+            </button>
+          </div>
+
+          {sitemapSyncResult && (
+            <div className="bg-emerald-950/20 text-emerald-400 border border-emerald-500/15 p-3 rounded-lg text-xs leading-relaxed">
+              {sitemapSyncResult}
+            </div>
+          )}
+
+          {/* Form to add manual link */}
+          <form onSubmit={handleSaveManualLink} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end bg-zinc-900/20 p-4 border border-zinc-850/60 rounded-xl">
+            <div className="col-span-1 md:col-span-3 space-y-1.5">
+              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block pl-0.5">Slug (स्लग नाम)</label>
+              <input
+                type="text"
+                value={manualSlug}
+                onChange={(e) => setManualSlug(e.target.value.trim().toLowerCase())}
+                placeholder="e.g. remove-symbols-online"
+                className="w-full bg-zinc-950 border border-zinc-800 text-xs px-3 py-2.5 rounded-lg text-zinc-300 focus:border-cyan-500/40 outline-none font-mono"
+                required
+              />
+            </div>
+
+            <div className="col-span-1 md:col-span-6 space-y-1.5">
+              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block pl-0.5">Real Live URL (असली वेबसाइट लिंक)</label>
+              <input
+                type="url"
+                value={manualUrl}
+                onChange={(e) => setManualUrl(e.target.value.trim())}
+                placeholder="https://www.texlyonline.in/seo/remove-symbols-online"
+                className="w-full bg-zinc-950 border border-zinc-800 text-xs px-3 py-2.5 rounded-lg text-zinc-300 focus:border-cyan-500/40 outline-none font-mono"
+                required
+              />
+            </div>
+
+            <div className="col-span-1 md:col-span-3">
+              <button
+                type="submit"
+                disabled={isSavingManualLink}
+                className="w-full py-2.5 bg-emerald-500 text-zinc-950 hover:bg-emerald-400 transition font-black text-xs rounded-lg disabled:opacity-50 flex items-center justify-center gap-1.5 uppercase"
+              >
+                <Plus size={13} />
+                <span>{isSavingManualLink ? "सहेज रहा है..." : "मैन्युअल सहेजें (Save Link)"}</span>
+              </button>
+            </div>
+          </form>
+
+          {manualSaveResult && (
+            <div className="bg-cyan-950/20 text-cyan-400 border border-cyan-500/15 p-3 rounded-lg text-xs leading-relaxed">
+              {manualSaveResult}
+            </div>
+          )}
+
+          {/* List of currently saved link mappings */}
+          {slugToUrlMap && Object.keys(slugToUrlMap).length > 0 && (
+            <div className="space-y-2 pt-4 border-t border-zinc-850/80">
+              <span className="text-xs font-bold text-zinc-400 block pl-0.5">सहेजे गए लिंक मैपिंग्स ({Object.keys(slugToUrlMap).length})</span>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-48 overflow-y-auto scrollbar-thin pr-1">
+                {Object.entries(slugToUrlMap).map(([slug, url]) => (
+                  <div key={slug} className="flex items-center justify-between bg-zinc-950/40 p-2.5 rounded-lg border border-zinc-855 text-xs gap-3 min-w-0 w-full overflow-hidden">
+                    <div className="min-w-0 flex-1">
+                      <div className="font-mono text-[11px] text-cyan-400 font-bold truncate">/{slug}</div>
+                      <div className="text-[10px] text-zinc-500 truncate font-mono mt-0.5">{url}</div>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setManualSlug(slug);
+                          setManualUrl(url);
+                        }}
+                        className="p-1 px-2 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-[10px] text-zinc-300 rounded font-bold transition cursor-pointer"
+                        title="Edit link map"
+                      >
+                        बदलें (Edit)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteLink(slug)}
+                        className="p-1 px-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded text-[10px] font-bold transition cursor-pointer"
+                        title="Delete link map"
+                      >
+                        हटाएं
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="text-[11px] text-zinc-550 flex items-center gap-1 px-1">
+            <Info size={12} className="text-zinc-500" />
+            <span>यदि आपका कोई पेज Next.js पर पब्लिश हो चुका है, तो आप ऊपर दिए गए स्वचलित या मैन्युअल विकल्प द्वारा उसके वास्तविक यूआरएल को जोड़ सकते हैं जिससे लाइव प्रीव्यू और इंटरनल लिंक्स पूरी तरह काम करें।</span>
+          </div>
+        </div>
+      )}
 
       {currentPage && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
@@ -403,6 +648,27 @@ export default function PreviewTab({ pages, initialSlug, onNavigateToTab }: Prev
                 </div>
               )}
 
+              {/* Detailed High-Value Guide Article (800-1000 words) */}
+              {currentPage.detailedContent && currentPage.detailedContent.length > 0 && (
+                <div className="space-y-4">
+                  <h3 className="text-xs font-mono font-bold text-zinc-400 uppercase tracking-wider pl-1.5 border-l-2 border-cyan-500">
+                    In-depth Guide & Technical Reference
+                  </h3>
+                  <div className="space-y-4 bg-[#0c0c12]/30 border border-zinc-850/80 p-5 rounded-xl">
+                    {currentPage.detailedContent.map((section: any, idx: number) => (
+                      <div key={idx} className="space-y-2">
+                        <h4 className="text-xs font-mono font-semibold text-zinc-350">{section.heading}</h4>
+                        <div className="text-[11px] text-zinc-400 leading-relaxed space-y-2">
+                          {section.paragraphs.map((p: string, pIdx: number) => (
+                            <p key={pIdx}>{p}</p>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Accordion FAQ panels */}
               {currentPage.faqList && currentPage.faqList.length > 0 && (
                 <div className="space-y-3">
@@ -433,26 +699,48 @@ export default function PreviewTab({ pages, initialSlug, onNavigateToTab }: Prev
               {/* Related internal links layout */}
               {currentPage.relatedTools && currentPage.relatedTools.length > 0 && (
                 <div className="border-t border-zinc-900/60 pt-6 space-y-2.5 text-center">
-                  <p className="text-[11px] text-zinc-550 italic">Looking for similar online utilities? Test companion utilities directly:</p>
+                  <p className="text-[11px] text-zinc-400 italic">Looking for similar online utilities? Test companion utilities directly:</p>
                   <div className="flex gap-2 justify-center flex-wrap">
-                    {currentPage.relatedTools.map((rel) => (
-                      <button 
-                        key={rel} 
-                        onClick={() => {
-                          if (pages.some(p => p.slug === rel)) {
-                            setSelectedSlug(rel);
-                          }
-                        }}
-                        className={`text-[10px] font-mono px-2.5 py-1.5 rounded border transition ${
-                          pages.some(p => p.slug === rel) 
-                            ? "bg-zinc-900/60 hover:bg-zinc-800 border-zinc-850 text-cyan-400 hover:text-cyan-300" 
-                            : "bg-zinc-950/20 border-zinc-950 text-zinc-650 line-through"
-                        }`}
-                        title={pages.some(p => p.slug === rel) ? "Jump to target preview" : "Not yet generated node"}
-                      >
-                        /{rel}
-                      </button>
-                    ))}
+                    {currentPage.relatedTools.map((rel) => {
+                      const isLocal = pages.some(p => p.slug === rel);
+                      if (isLocal) {
+                        return (
+                          <button 
+                            key={rel} 
+                            onClick={() => setSelectedSlug(rel)}
+                            className="text-[10px] font-mono px-3 py-1.5 rounded-xl border border-cyan-500/35 text-cyan-400 bg-cyan-950/30 hover:bg-cyan-900/20 transition flex items-center gap-1.5 hover:border-cyan-400 hover:text-cyan-300 cursor-pointer"
+                            title="Jump to target preview locally"
+                          >
+                            <span>/{rel}</span>
+                            <span className="w-1.5 h-1.5 rounded-full bg-cyan-450 inline-block"></span>
+                          </button>
+                        );
+                      } else {
+                        // Dynamically determine the correct live URL with proper directory namespace prefix
+                        let liveUrl = `https://www.texlyonline.in/tool/${rel}`;
+                        if (slugToUrlMap && slugToUrlMap[rel]) {
+                          liveUrl = slugToUrlMap[rel];
+                        } else if (pages.some(p => p.slug === rel)) {
+                          liveUrl = `https://www.texlyonline.in/seo/${rel}`;
+                        } else if (rel.includes("how-to") || rel.includes("best-") || rel.includes("guide") || rel.includes("explain") || rel.includes("text-cleaner")) {
+                          liveUrl = `https://www.texlyonline.in/blog/${rel}`;
+                        }
+
+                        return (
+                          <a 
+                            key={rel} 
+                            href={liveUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[10px] font-mono px-3 py-1.5 rounded-xl border border-indigo-500/35 text-indigo-400 bg-indigo-950/30 hover:bg-indigo-900/20 transition flex items-center gap-1.5 hover:border-indigo-400 hover:text-indigo-300"
+                            title="Active companion tool: Opens on the live domain"
+                          >
+                            <span>/{rel}</span>
+                            <span className="text-[9px] opacity-80 font-bold">↗</span>
+                          </a>
+                        );
+                      }
+                    })}
                   </div>
                 </div>
               )}
@@ -550,10 +838,34 @@ export default function PreviewTab({ pages, initialSlug, onNavigateToTab }: Prev
             {/* Schema Markup Checker Card */}
             {currentPage.schemaMarkup && (
               <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5 space-y-3">
-                <h3 className="text-white text-xs font-bold uppercase tracking-wider font-mono pb-2 border-b border-zinc-850 flex items-center gap-1.5">
-                  <FileText size={14} className="text-emerald-400" />
-                  Google Rich JSON-LD Markup
-                </h3>
+                <div className="flex justify-between items-center border-b border-zinc-850 pb-2">
+                  <h3 className="text-white text-xs font-bold uppercase tracking-wider font-mono flex items-center gap-1.5">
+                    <FileText size={14} className="text-emerald-400" />
+                    Google Rich JSON-LD Markup
+                  </h3>
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(JSON.stringify(currentPage.schemaMarkup, null, 2));
+                      setCopiedSchema(true);
+                      setTimeout(() => setCopiedSchema(false), 2000);
+                    }}
+                    className="text-zinc-500 hover:text-white transition duration-150 cursor-pointer text-xs flex items-center gap-1 font-mono"
+                    title="Copy Schema"
+                  >
+                    {copiedSchema ? (
+                      <>
+                        <Check size={12} className="text-emerald-400" />
+                        <span className="text-emerald-400 text-[10px]">Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy size={12} />
+                        <span className="text-[10px]">Copy JSON</span>
+                      </>
+                    )}
+                  </button>
+                </div>
                 <div className="bg-zinc-950 p-3 rounded border border-zinc-900 font-mono text-[10px] text-zinc-400 overflow-x-auto max-h-40 select-all">
                   <pre>{JSON.stringify(currentPage.schemaMarkup, null, 2)}</pre>
                 </div>

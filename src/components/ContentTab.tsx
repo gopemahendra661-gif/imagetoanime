@@ -9,21 +9,29 @@ import {
   HelpCircle, Sparkles, BookOpen, Share2, Clipboard, Chrome 
 } from "lucide-react";
 import { SEOPage } from "../types";
+import { Cloud, RefreshCw, AlertTriangle } from "lucide-react";
 
 interface ContentTabProps {
-  onGenerate: (keyword: string, slug: string, category: string) => Promise<SEOPage | null>;
+  onGenerate: (keyword: string, slug: string, category: string, pushToLive: boolean) => Promise<SEOPage | null>;
   isGenerating: boolean;
+  onPushAll: () => Promise<{ success: boolean; message: string; error?: string }>;
 }
 
 export default function ContentTab({
   onGenerate,
-  isGenerating
+  isGenerating,
+  onPushAll
 }: ContentTabProps) {
   const [keyword, setKeyword] = useState("");
   const [slug, setSlug] = useState("");
   const [category, setCategory] = useState("Text Cleaners");
   const [generatedPage, setGeneratedPage] = useState<SEOPage | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  // Auto-push and manual sync states
+  const [pushToLive, setPushToLive] = useState(false);
+  const [isPushing, setIsPushing] = useState(false);
+  const [pushResult, setPushResult] = useState<{ success: boolean; message: string } | null>(null);
 
   // Auto-derived slug on keyword change
   const handleKeywordChange = (val: string) => {
@@ -39,9 +47,23 @@ export default function ContentTab({
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!keyword.trim() || !slug.trim()) return;
-    const page = await onGenerate(keyword, slug, category);
+    setPushResult(null);
+    const page = await onGenerate(keyword, slug, category, pushToLive);
     if (page) {
       setGeneratedPage(page);
+    }
+  };
+
+  const handlePushAll = async () => {
+    setIsPushing(true);
+    setPushResult(null);
+    try {
+      const result = await onPushAll();
+      setPushResult(result);
+    } catch (err: any) {
+      setPushResult({ success: false, message: "Manual push failed to start." });
+    } finally {
+      setIsPushing(false);
     }
   };
 
@@ -107,6 +129,19 @@ export default function ContentTab({
               </select>
             </div>
 
+            <div className="flex items-center gap-2 py-1 select-none">
+              <input 
+                type="checkbox" 
+                id="push_to_live_content_tab"
+                checked={pushToLive}
+                onChange={(e) => setPushToLive(e.target.checked)}
+                className="w-4 h-4 rounded bg-zinc-950 border-zinc-800 text-cyan-500 focus:ring-0 cursor-pointer accent-cyan-500"
+              />
+              <label htmlFor="push_to_live_content_tab" className="text-xs text-zinc-400 font-medium cursor-pointer hover:text-zinc-200">
+                Publish to Live Site instantly (GitHub + Vercel)
+              </label>
+            </div>
+
             <button 
               disabled={isGenerating || !keyword.trim() || !slug.trim()}
               className="w-full flex items-center justify-center gap-2 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-bold rounded-lg transition disabled:opacity-40 select-none uppercase tracking-widest font-mono text-xs cursor-pointer"
@@ -163,15 +198,57 @@ export default function ContentTab({
             </div>
           ) : (
             <div className="space-y-6">
-              {/* Top Meta header confirmation */}
-              <div className="flex justify-between items-center bg-zinc-900 border border-zinc-800 p-4 rounded-xl">
-                <div className="flex items-center gap-2 text-emerald-400">
-                  <FileCheck size={20} />
-                  <span className="text-sm font-semibold">Ready to Index on texlyonline.in</span>
+              {/* Top Meta header confirmation & Live Publish Sync Action */}
+              <div className="space-y-3">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-zinc-900 border border-zinc-800 p-4 rounded-xl">
+                  <div className="flex items-center gap-3 text-emerald-400">
+                    <FileCheck size={20} className="shrink-0" />
+                    <div>
+                      <span className="text-sm font-semibold block">Saved Locally (/${generatedPage.slug})</span>
+                      <span className="text-[11px] text-zinc-400 block pb-0.5">Push code manually to sync local database metadata with your GitHub repository & trigger a cloud Vercel deploy trigger!</span>
+                    </div>
+                  </div>
+                  
+                  <button
+                    onClick={handlePushAll}
+                    disabled={isPushing}
+                    className="flex shrink-0 items-center justify-center gap-1.5 px-3.5 py-1.5 bg-cyan-500 hover:bg-cyan-400 border border-transparent text-zinc-950 text-xs font-bold rounded-lg transition disabled:opacity-50 font-mono uppercase tracking-wider cursor-pointer select-none"
+                  >
+                    {isPushing ? (
+                      <>
+                        <RefreshCw size={12} className="animate-spin" />
+                        Pushing...
+                      </>
+                    ) : (
+                      <>
+                        <Cloud size={12} />
+                        Push to GitHub / Vercel
+                      </>
+                    )}
+                  </button>
                 </div>
-                <span className="text-[10px] font-mono bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded uppercase font-semibold border border-emerald-500/20">
-                  Node Persisted
-                </span>
+
+                {pushResult && (
+                  <div className={`flex items-start gap-2.5 p-3.5 border rounded-lg text-xs ${
+                    pushResult.success 
+                      ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" 
+                      : "bg-red-500/10 border-red-500/20 text-red-400"
+                  }`}>
+                    {pushResult.success ? (
+                      <div className="flex-1">
+                        <strong className="font-semibold block">सफलतापूर्वक सिंक हो गया है! 🚀 Sync Succeeded!</strong>
+                        <span>{pushResult.message} Your programmatic elements, dynamic maps and sitemaps are live deployed!</span>
+                      </div>
+                    ) : (
+                      <div className="flex-1">
+                        <strong className="font-semibold block flex items-center gap-1 text-red-450">
+                          <AlertTriangle size={13} /> Sync Failed
+                        </strong>
+                        <span>{pushResult.message}. Make sure GitHub tokens & repos are configured in the configurations tab!</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Essential Metadata Blocks */}
@@ -266,6 +343,28 @@ export default function ContentTab({
                   </div>
                 </div>
               </div>
+
+              {/* Detailed Content Guide (800-1000 words) */}
+              {generatedPage.detailedContent && generatedPage.detailedContent.length > 0 && (
+                <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6 space-y-4">
+                  <h3 className="text-base font-bold text-white tracking-tight border-b border-zinc-800 pb-2 flex items-center gap-1.5">
+                    <BookOpen size={16} className="text-cyan-400" />
+                    Detailed High-Value Article Content ({generatedPage.detailedContent.reduce((acc, curr) => acc + curr.paragraphs.join(" ").split(" ").length, 0)} Words)
+                  </h3>
+                  <div className="space-y-4">
+                    {generatedPage.detailedContent.map((section, i) => (
+                      <div key={i} className="bg-zinc-950 border border-zinc-850 p-4 rounded-lg space-y-2">
+                        <h4 className="font-bold text-sm text-zinc-200">{section.heading}</h4>
+                        <div className="text-xs text-zinc-400 leading-relaxed space-y-2">
+                          {section.paragraphs.map((p, pIdx) => (
+                            <p key={pIdx}>{p}</p>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Web FAQs Panel */}
               <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6 space-y-4">

@@ -42,6 +42,29 @@ function getPageBySlug(slug) {
   }
 }
 
+// Helper to resolve correct route paths dynamically based on standard vs. SEO tools
+function getRoutePath(slug) {
+  if (!slug) return "/";
+  // If it's a blog link
+  if (slug.includes("how-to") || slug.includes("best-") || slug.includes("guide") || slug.includes("explain") || slug.includes("text-cleaner")) {
+    return "/blog/" + slug;
+  }
+  // List of known core /tool/ prefix tools
+  const knownTools = [
+    "ai-text-suite", "face-swap", "bg-remover", "enhancer", "compressor", 
+    "image-upscale", "image-generator", "snapchat-tag-generator",
+    "remove-all-whitespace-online", "remove-extra-spaces-online", "remove-line-breaks-tool",
+    "remove-duplicate-lines-tool", "remove-empty-lines-online", "remove-numbers-from-text",
+    "remove-special-characters-online", "whitespace-remover-online", "clean-text-online-free"
+  ];
+  if (knownTools.includes(slug)) {
+    return "/tool/" + slug;
+  }
+  
+  // Default to programmatic SEO landing path
+  return "/seo/" + slug;
+}
+
 // 1. Generate Static HTML Routes during Vercel Build (generateStaticParams)
 export async function generateStaticParams() {
   try {
@@ -104,7 +127,7 @@ export default function DynamicSEOPage({ params }) {
               TEXLY
             </span>
           </div>
-          <div className="flex items-center gap-5 text-xs font-semibold text-neutral-600">
+          <div className="flex items-center gap-5 text-sm font-semibold text-neutral-600">
             <a href="/" className="hover:text-indigo-600 transition">AI Tools</a>
             <a href="/blog" className="hover:text-indigo-600 transition">Blog</a>
             <a href="https://www.texlyonline.in" className="px-3 py-1.5 bg-neutral-100 hover:bg-neutral-200/80 text-neutral-800 rounded-lg transition">DevStudio</a>
@@ -121,7 +144,7 @@ export default function DynamicSEOPage({ params }) {
           <h1 className="text-3xl md:text-5xl font-extrabold tracking-tight text-neutral-950 max-w-2xl mx-auto leading-tight">
             {page.title.split(" - ")[0]}
           </h1>
-          <p className="text-neutral-500 text-base md:text-lg leading-relaxed max-w-3xl mx-auto">
+          <p className="text-neutral-600 text-[15px] md:text-[17px] leading-relaxed max-w-3xl mx-auto font-normal">
             {page.intro}
           </p>
         </section>
@@ -150,12 +173,12 @@ export default function DynamicSEOPage({ params }) {
           </div>
 
           <div className="flex justify-between items-center bg-neutral-50 p-3.5 rounded-xl border border-neutral-150/70 flex-wrap gap-3">
-            <span className="text-xs text-neutral-500 flex items-center gap-1.5 font-medium">
+            <span className="text-xs text-neutral-500 flex items-center gap-1.5 font-medium font-sans">
               ⚡ Zero data leaks: Runs safely inside your browser memory context.
             </span>
             <button 
               id="raw-cleanse-btn"
-              className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-indigo-100 hover:shadow-indigo-200/50 transition uppercase tracking-wider cursor-pointer"
+              className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-indigo-100 hover:shadow-indigo-200/50 transition uppercase tracking-wider cursor-pointer font-sans"
             >
               Perform Cleanse
             </button>
@@ -166,7 +189,7 @@ export default function DynamicSEOPage({ params }) {
               <span className="text-xs font-bold text-neutral-400 uppercase tracking-wider font-mono">Sanitized Output Result</span>
               <button 
                 id="copy-text-btn"
-                className="text-xs font-bold text-indigo-600 hover:text-indigo-550 transition flex items-center gap-1 bg-indigo-55 bg-indigo-50 hover:bg-indigo-100/80 px-2.5 py-1 rounded"
+                className="text-xs font-bold text-indigo-600 hover:text-indigo-550 transition flex items-center gap-1 bg-indigo-50 hover:bg-indigo-100/80 px-2.5 py-1 rounded font-sans"
               >
                 Copy Content
               </button>
@@ -174,7 +197,7 @@ export default function DynamicSEOPage({ params }) {
             <textarea
               id="raw-text-output"
               readOnly
-              className="w-full bg-indigo-55/10 border border-indigo-100 p-4 rounded-xl text-sm font-mono text-neutral-800 outline-none focus:ring-1 focus:ring-indigo-200 transition"
+              className="w-full bg-neutral-50 border border-neutral-100 p-4 rounded-xl text-sm font-mono text-neutral-800 outline-none focus:ring-1 focus:ring-indigo-200 transition"
               rows={6}
             />
           </div>
@@ -182,13 +205,13 @@ export default function DynamicSEOPage({ params }) {
 
         {/* Beautiful CTA section which can optionally link to all tools directory */}
         <section className="bg-gradient-to-r from-indigo-600 to-indigo-700 rounded-2xl p-6 text-white flex flex-col md:flex-row justify-between items-center gap-6 shadow-xl shadow-indigo-100">
-          <div className="space-y-1.5 text-center md:text-left">
+          <div className="space-y-1.5 text-center md:text-left font-sans">
             <h3 className="text-lg font-extrabold tracking-tight">Texly पर Try करें — 100% Free</h3>
             <p className="text-xs text-indigo-100 font-medium font-sans">No login, no signup — browser में directly tools use करें।</p>
           </div>
           <a 
             href="https://www.texlyonline.in" 
-            className="px-5 py-2.5 bg-white hover:bg-neutral-55 text-indigo-600 font-extrabold text-xs rounded-xl transition shadow-md shrink-0 text-center"
+            className="px-5 py-2.5 bg-white hover:bg-neutral-100 text-indigo-600 font-extrabold text-xs rounded-xl transition shadow-md shrink-0 text-center font-sans"
           >
             🚀 Texly Directory खोलें
           </a>
@@ -196,16 +219,16 @@ export default function DynamicSEOPage({ params }) {
 
         {/* SEO Rich Key Use Cases Grid */}
         {page.useCases && page.useCases.length > 0 && (
-          <section className="space-y-5 bg-white p-6 md:p-8 rounded-2xl border border-neutral-200">
+          <section className="space-y-5 bg-white p-6 md:p-8 rounded-2xl border border-neutral-200 font-sans">
             <h3 className="text-lg font-bold text-neutral-900 border-l-4 border-indigo-600 pl-3">Key Use Cases & Workflows</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
               {page.useCases.map((u, i) => (
-                <div key={i} className="bg-neutral-55 bg-neutral-100/50 border border-neutral-100 p-5 rounded-xl space-y-2">
+                <div key={i} className="bg-neutral-50 border border-neutral-100 p-5 rounded-xl space-y-2">
                   <span className="text-xs font-black text-indigo-500 bg-indigo-50 px-2.5 py-1 rounded-full">
                     0{i+1}
                   </span>
-                  <h4 className="font-bold text-sm text-neutral-900 pt-1">{u.title}</h4>
-                  <p className="text-xs text-neutral-400 leading-relaxed font-normal">{u.description}</p>
+                  <h4 className="font-bold text-[15px] text-neutral-900 pt-1">{u.title}</h4>
+                  <p className="text-xs md:text-sm text-neutral-600 leading-relaxed font-normal">{u.description}</p>
                 </div>
               ))}
             </div>
@@ -214,19 +237,19 @@ export default function DynamicSEOPage({ params }) {
 
         {/* Algorithmic Before and After Visual Examples */}
         {page.examples && page.examples.length > 0 && (
-          <section className="space-y-4 bg-white p-6 md:p-8 rounded-2xl border border-neutral-200">
+          <section className="space-y-4 bg-white p-6 md:p-8 rounded-2xl border border-neutral-200 font-sans">
             <h3 className="text-lg font-bold text-neutral-900 border-l-4 border-indigo-600 pl-3">Algorithmic Conversion Examples</h3>
             <div className="space-y-4">
               {page.examples.map((ex, i) => (
                 <div key={i} className="p-4 bg-neutral-50 rounded-xl space-y-3 font-mono text-xs text-neutral-700">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1">
-                      <span className="text-[10px] text-neutral-400 font-extrabold uppercase select-none block">Sample Input:</span>
-                      <pre className="p-3 bg-white rounded border border-neutral-200 select-all whitespace-pre-wrap">{ex.input}</pre>
+                      <span className="text-[10px] text-neutral-400 font-extrabold uppercase select-none block font-mono">Sample Input:</span>
+                      <pre className="p-3 bg-white rounded border border-neutral-200 select-all whitespace-pre-wrap font-mono">{ex.input}</pre>
                     </div>
                     <div className="space-y-1">
-                      <span className="text-[10px] text-emerald-600 font-extrabold uppercase select-none block">Expected Output:</span>
-                      <pre className="p-3 bg-emerald-50 text-emerald-850 rounded border border-emerald-200 select-all whitespace-pre-wrap">{ex.output}</pre>
+                      <span className="text-[10px] text-emerald-600 font-extrabold uppercase select-none block font-mono">Expected Output:</span>
+                      <pre className="p-3 bg-emerald-50 text-emerald-850 rounded border border-emerald-200 select-all whitespace-pre-wrap font-mono">{ex.output}</pre>
                     </div>
                   </div>
                   {ex.explanation && (
@@ -240,18 +263,37 @@ export default function DynamicSEOPage({ params }) {
           </section>
         )}
 
+        {/* Detailed High-Value Guide Article (800-1000 words to prevent thin content) */}
+        {page.detailedContent && page.detailedContent.length > 0 && (
+          <section className="space-y-6 bg-white p-6 md:p-8 rounded-2xl border border-neutral-200 font-sans">
+            <h3 className="text-lg font-bold text-neutral-900 border-l-4 border-indigo-600 pl-3">In-Depth Guide & Technical Reference</h3>
+            <div className="space-y-6">
+              {page.detailedContent.map((section, idx) => (
+                <div key={idx} className="space-y-3">
+                  <h4 className="text-base md:text-lg font-extrabold text-neutral-900">{section.heading}</h4>
+                  <div className="text-[14px] md:text-[15px] text-neutral-700 leading-relaxed space-y-3.5 font-normal font-sans">
+                    {section.paragraphs.map((p, pIdx) => (
+                      <p key={pIdx}>{p}</p>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* Interactive FAQ Accordion */}
         {page.faqList && page.faqList.length > 0 && (
-          <section className="space-y-5 bg-white p-6 md:p-8 rounded-2xl border border-neutral-200">
+          <section className="space-y-5 bg-white p-6 md:p-8 rounded-2xl border border-neutral-200 font-sans">
             <h3 className="text-lg font-bold text-neutral-900 border-l-4 border-indigo-600 pl-3">Frequently Asked Questions</h3>
             <div className="space-y-3">
               {page.faqList.map((faq, i) => (
-                <details key={i} className="bg-neutral-50 hover:bg-neutral-100/50 border border-neutral-200 p-4 rounded-xl group cursor-pointer transition">
-                  <summary className="font-bold text-sm text-neutral-800 list-none flex justify-between items-center select-none">
+                <details key={i} className="bg-neutral-50 hover:bg-neutral-100/30 border border-neutral-200 p-4 rounded-xl group cursor-pointer transition">
+                  <summary className="font-bold text-sm md:text-[15px] text-neutral-800 list-none flex justify-between items-center select-none font-sans">
                     <span>{faq.question}</span>
                     <span className="text-xs text-neutral-400 group-open:rotate-180 transition-transform">▼</span>
                   </summary>
-                  <p className="text-xs text-neutral-500 leading-relaxed mt-3 pl-3 border-l-2 border-indigo-400 font-sans font-normal">
+                  <p className="text-xs md:text-sm text-neutral-600 leading-relaxed mt-3 pl-3 border-l-2 border-indigo-500 font-sans font-normal">
                     {faq.answer}
                   </p>
                 </details>
@@ -262,17 +304,20 @@ export default function DynamicSEOPage({ params }) {
 
         {/* Internal Linking matrix widget */}
         <footer className="pt-8 border-t border-neutral-200 text-xs text-neutral-500 text-center space-y-4 font-sans">
-          <p className="font-medium text-neutral-400">Looking for similar high-performance text cleansers? Check out these companion utilities:</p>
+          <p className="font-medium text-neutral-400 font-sans">Looking for similar high-performance text cleansers? Check out these companion utilities:</p>
           <div className="flex gap-2.5 justify-center flex-wrap">
-            {page.relatedTools?.map((rel) => (
-              <a 
-                key={rel} 
-                href={\`/\${rel}\`} 
-                className="bg-white hover:bg-neutral-50 text-neutral-700 hover:text-indigo-600 px-3.5 py-2 rounded-xl border border-neutral-200 hover:border-indigo-200 font-mono transition text-xs shadow-sm hover:shadow-md"
-              >
-                /{rel}
-              </a>
-            ))}
+            {page.relatedTools?.map((rel) => {
+              const route = getRoutePath(rel);
+              return (
+                <a 
+                  key={rel} 
+                  href={route} 
+                  className="bg-white hover:bg-neutral-100 text-neutral-700 hover:text-indigo-600 px-3.5 py-2 rounded-xl border border-neutral-200 hover:border-indigo-200 font-mono transition text-xs shadow-sm hover:shadow-md"
+                >
+                  {route}
+                </a>
+              );
+            })}
           </div>
         </footer>
       </main>

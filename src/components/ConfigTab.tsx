@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from "react";
 import { 
   Settings, Save, Check, RefreshCw, AlertTriangle, ShieldCheck, 
-  Github, Cloud, Cpu, Sparkles, Database, Search, Shield, Zap
+  Github, Cloud, Cpu, Sparkles, Database, Search, Shield, Zap, Copy
 } from "lucide-react";
 
 interface ConfigState {
@@ -18,8 +18,8 @@ interface ConfigState {
   useGroq: boolean;
   groqApiKey: string;
   groqModel: string;
-  supabaseUrl: string;
-  supabaseKey: string;
+  supabaseUrl?: string; // Optional legacy
+  supabaseKey?: string;  // Optional legacy
   openrouterApiKey?: string;
   openrouterModel?: string;
   geminiApiKey?: string;
@@ -30,13 +30,18 @@ interface ConfigState {
 interface ConfigTabProps {
   initialConfig: ConfigState | null;
   onSaveConfig: (cfg: Partial<ConfigState>) => Promise<boolean>;
+  supabaseConnected?: boolean;
+  supabaseUrlMasked?: string;
 }
 
 export default function ConfigTab({
   initialConfig,
-  onSaveConfig
+  onSaveConfig,
+  supabaseConnected = false,
+  supabaseUrlMasked = ""
 }: ConfigTabProps) {
   const [githubRepo, setGithubRepo] = useState("");
+  const [copiedSql, setCopiedSql] = useState(false);
   const [githubToken, setGithubToken] = useState("");
   const [vercelWebhookUrl, setVercelWebhookUrl] = useState("");
   const [automatedFrequency, setAutomatedFrequency] = useState("24-hours");
@@ -44,11 +49,11 @@ export default function ConfigTab({
   const [useGroq, setUseGroq] = useState(false);
   const [groqApiKey, setGroqApiKey] = useState("");
   const [groqModel, setGroqModel] = useState("llama3-70b-8192");
-  const [supabaseUrl, setSupabaseUrl] = useState("");
-  const [supabaseKey, setSupabaseKey] = useState("");
   const [geminiApiKey, setGeminiApiKey] = useState("");
   const [adminUsername, setAdminUsername] = useState("admin");
   const [adminPassword, setAdminPassword] = useState("admin123");
+  const [supabaseUrl, setSupabaseUrl] = useState("");
+  const [supabaseKey, setSupabaseKey] = useState("");
 
   // OpenRouter & Dynamic Models State
   const [openrouterApiKey, setOpenrouterApiKey] = useState("");
@@ -64,10 +69,51 @@ export default function ConfigTab({
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
+  // Database manual cleansing states
+  const [sanitizing, setSanitizing] = useState(false);
+  const [sanitizeSuccess, setSanitizeSuccess] = useState<boolean | null>(null);
+  const [sanitizeMessage, setSanitizeMessage] = useState("");
+
+  const handleSanitize = async () => {
+    setSanitizing(true);
+    setSanitizeSuccess(null);
+    setSanitizeMessage("");
+    try {
+      const token = localStorage.getItem("texly_admin_token");
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+      
+      const res = await fetch("/api/database/sanitize", { 
+        method: "POST",
+        headers
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSanitizeSuccess(true);
+        setSanitizeMessage(data.message || "सफलतापूर्वक डेटाबेस क्लीन कर दिया गया!");
+      } else {
+        setSanitizeSuccess(false);
+        setSanitizeMessage(data.error || data.message || "सैनिटाइजेशन फेल हो गया।");
+      }
+    } catch (err: any) {
+      setSanitizeSuccess(false);
+      setSanitizeMessage("कनेक्शन एरर। सर्वर पर कनेक्टिविटी चेक करें।");
+    } finally {
+      setSanitizing(false);
+    }
+  };
+
   const fetchOpenRouterModels = async () => {
     setLoadingOpenRouterModels(true);
     try {
-      const res = await fetch("/api/models/openrouter");
+      const token = localStorage.getItem("texly_admin_token");
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+      const res = await fetch("/api/models/openrouter", { headers });
       const data = await res.json();
       if (data.success && data.models) {
         setOpenrouterModels(data.models);
@@ -82,14 +128,31 @@ export default function ConfigTab({
   const fetchGroqModels = async (keyToUse?: string) => {
     setLoadingGroqModels(true);
     try {
+      const token = localStorage.getItem("texly_admin_token");
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
       const apiKeyVal = keyToUse !== undefined ? keyToUse : groqApiKey;
-      const res = await fetch(`/api/models/groq?apiKey=${encodeURIComponent(apiKeyVal)}`);
+      const res = await fetch(`/api/models/groq?apiKey=${encodeURIComponent(apiKeyVal)}`, { headers });
+      
+      if (!res.ok) {
+        throw new Error(`HTTP Error: ${res.status}`);
+      }
+      
       const data = await res.json();
       if (data.success && data.models) {
         setGroqModels(data.models);
       }
-    } catch (e) {
-      console.error("Failed to fetch Groq models:", e);
+    } catch (e: any) {
+      console.warn("Failed to fetch Groq models from local API proxy, using default local presets:", e?.message || e);
+      // Clean and safe client-side preset models fallback, avoiding red blocker errors
+      setGroqModels([
+        { id: "llama3-70b-8192", name: "llama3-70b-8192 (Free Preset)", isFree: true },
+        { id: "deepseek-r1-distill-llama-70b", name: "deepseek-r1-distill-llama-70b (Free Distill)", isFree: true },
+        { id: "gemma2-9b-it", name: "gemma2-9b-it (Fast Heuristics)", isFree: true },
+        { id: "mixtral-8x7b-32768", name: "mixtral-8x7b-32768 (Mixture of Experts)", isFree: true }
+      ]);
     } finally {
       setLoadingGroqModels(false);
     }
@@ -105,13 +168,13 @@ export default function ConfigTab({
       setUseGroq(initialConfig.useGroq || false);
       setGroqApiKey(initialConfig.groqApiKey || "");
       setGroqModel(initialConfig.groqModel || "llama3-70b-8192");
-      setSupabaseUrl(initialConfig.supabaseUrl || "");
-      setSupabaseKey(initialConfig.supabaseKey || "");
       setOpenrouterApiKey(initialConfig.openrouterApiKey || "");
       setOpenrouterModel(initialConfig.openrouterModel || "google/gemini-2.5-flash:free");
       setGeminiApiKey(initialConfig.geminiApiKey || "");
       setAdminUsername(initialConfig.adminUsername || "admin");
       setAdminPassword(initialConfig.adminPassword || "admin123");
+      setSupabaseUrl(initialConfig.supabaseUrl || "");
+      setSupabaseKey(initialConfig.supabaseKey || "");
 
       // Auto load models once on initial config retrieval
       fetchOpenRouterModels();
@@ -131,13 +194,13 @@ export default function ConfigTab({
       useGroq,
       groqApiKey,
       groqModel,
-      supabaseUrl,
-      supabaseKey,
       openrouterApiKey,
       openrouterModel,
       geminiApiKey,
       adminUsername,
-      adminPassword
+      adminPassword,
+      supabaseUrl,
+      supabaseKey
     });
     setSaving(false);
     if (success) {
@@ -173,7 +236,7 @@ export default function ConfigTab({
                   type="text" 
                   value={githubRepo}
                   onChange={(e) => setGithubRepo(e.target.value)}
-                  placeholder="e.g. mahendragope/texlyonline.in"
+                  placeholder="Past Your Repostry Link"
                   className="w-full bg-zinc-950 border border-zinc-800 text-sm px-3.5 py-2.5 rounded-lg outline-none text-zinc-300 focus:border-cyan-500/40"
                 />
               </div>
@@ -198,7 +261,7 @@ export default function ConfigTab({
                 <Cloud size={12} /> Vercel Deploy Webhook URL
               </label>
               <input 
-                type="text" 
+                type="password" 
                 value={vercelWebhookUrl}
                 onChange={(e) => setVercelWebhookUrl(e.target.value)}
                 placeholder="https://api.vercel.com/v1/integrations/deploy/..."
@@ -647,39 +710,56 @@ export default function ConfigTab({
 
             {/* Supabase Database Settings */}
             <div className="pt-5 border-t border-zinc-850 space-y-4">
-              <div className="bg-zinc-950 p-4 rounded-lg border border-cyan-950/50 space-y-2">
-                <h4 className="text-sm font-bold text-white tracking-tight flex items-center gap-1.5">
-                  <Database size={14} className="text-cyan-400 animate-pulse" />
-                  Supabase Persistent Database & Active Device Backup Cache
-                </h4>
-                <p className="text-[11px] text-zinc-400 leading-relaxed">
-                  Avoid losing your generated pages and configuration settings when Render.com restarts or redeploys! Connecting a free Supabase instance synchronizes all database items in the cloud to survive container recycles and ephemeral disk resets.
+              <div className="bg-zinc-950 p-4 rounded-lg border border-cyan-950/50 space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <h4 className="text-sm font-bold text-white tracking-tight flex items-center gap-1.5">
+                    <Database size={15} className="text-cyan-400 animate-pulse" />
+                    Supabase Secure Cloud Sync & Backups
+                  </h4>
+                  <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-sans font-bold flex items-center gap-1 uppercase ${supabaseConnected ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-zinc-900 text-zinc-500 border border-zinc-800"}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${supabaseConnected ? "bg-emerald-400 animate-ping" : "bg-zinc-550"}`}></span>
+                    {supabaseConnected ? "Active & Connected" : "Inactive (Local Store)"}
+                  </span>
+                </div>
+                
+                <p className="text-[11px] text-zinc-400 leading-relaxed font-sans">
+                  Prevent data loss during container resets or redeployments! Connecting a secure Cloud database automatically persists your SEO pages, system logs, and general configurations dynamically.
                 </p>
-                <div className="bg-cyan-500/5 border border-cyan-500/25 p-2 rounded-lg text-[10.5px] text-cyan-300 leading-relaxed font-sans">
-                  <strong>सुरक्षित लोकल बैकअप एक्टिवेटेड:</strong> आपके द्वारा भरे गए सभी विवरण जैसे <em>GitHub Repo, Token, Vercel Webhook, Supabase URL व API Key</em> आपके ब्राउज़र के लोकलमैनुअल स्टोरेज में सुरक्षित संरक्षित रहते हैं। सर्वर रीस्टार्ट होने पर फ्रंटएंड स्वतः इन्हें एक्टिवेट कर दोबारा सर्वर पर सिंक कर देता है जिससे आपको बार-बार कीज पेस्ट नहीं करनी पड़ेगी!
-                </div>
-              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Supabase URL</label>
-                  <input 
-                    type="text" 
-                    value={supabaseUrl}
-                    onChange={(e) => setSupabaseUrl(e.target.value)}
-                    placeholder="https://xxxxxxxxxxxxx.supabase.co"
-                    className="w-full bg-zinc-950 border border-zinc-800 text-sm px-3.5 py-2.5 rounded-lg outline-none text-zinc-300 focus:border-cyan-500/40 font-mono text-xs"
-                  />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 my-3 pt-2 border-t border-zinc-900 font-sans">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-zinc-400">
+                      Supabase DB URL (कस्टम सुपबेस URL)
+                    </label>
+                    <input 
+                      type="text" 
+                      value={supabaseUrl}
+                      onChange={(e) => setSupabaseUrl(e.target.value)}
+                      placeholder="https://your-project.supabase.co"
+                      className="w-full bg-zinc-950 border border-zinc-800 text-xs px-3.5 py-2.5 rounded-lg outline-none text-zinc-300 focus:border-cyan-500/40 font-mono"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-zinc-400">
+                      Supabase DB Key (कस्टम सुपबेस Key)
+                    </label>
+                    <input 
+                      type="password" 
+                      value={supabaseKey}
+                      onChange={(e) => setSupabaseKey(e.target.value)}
+                      placeholder="e.g. eyJhbGciOiJIUzI1NiIsIn..."
+                      className="w-full bg-zinc-950 border border-zinc-800 text-xs px-3.5 py-2.5 rounded-lg outline-none text-zinc-300 focus:border-cyan-500/40 font-mono"
+                    />
+                  </div>
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Supabase API Key (Anon / Service Role)</label>
-                  <input 
-                    type="password" 
-                    value={supabaseKey}
-                    onChange={(e) => setSupabaseKey(e.target.value)}
-                    placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                    className="w-full bg-zinc-950 border border-zinc-800 text-sm px-3.5 py-2.5 rounded-lg outline-none text-zinc-300 focus:border-cyan-500/40 font-mono text-xs"
-                  />
+
+                <div className="bg-cyan-500/5 border border-cyan-500/15 p-3 rounded-lg text-[11px] text-zinc-300 leading-relaxed font-sans space-y-1">
+                  <p className="font-semibold text-cyan-400 flex items-center gap-1">
+                    🌐 मल्टी-यूजर क्लाउड डेटाबेस (Multi-User Cloud Integration Active)
+                  </p>
+                  <p className="text-[10px.5] text-zinc-400">
+                    आप अपना स्वयं का Supabase URL और Key यहाँ सेव कर सकते हैं। यह जानकारी आपके सुरक्षित यूज़र फ़ोल्डर में सुरक्षित रूप से संरक्षित रहेगी और किसी अन्य यूज़र के साथ साँझा नहीं होगी। यदि आप इनका उपयोग नहीं करते हैं, तो सर्वर के डिफ़ॉल्ट एन्वायरमेंट क्रेडेंशियल्स का उपयोग किया जाएगा।
+                  </p>
                 </div>
               </div>
 
@@ -687,17 +767,71 @@ export default function ConfigTab({
               <div className="p-4 bg-zinc-955/65 rounded-lg space-y-3 border border-zinc-805">
                 <div className="flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
-                  <h5 className="text-[11px] font-bold text-zinc-300 uppercase tracking-wide">Required SQL Table Schema Setup</h5>
+                  <h5 className="text-[11px] font-bold text-zinc-300 uppercase tracking-wide">Required SQL Table Setup for Custom DB / पृथक डेटा प्राइवेसी सुरक्षा</h5>
                 </div>
-                <p className="text-[10.5px] text-zinc-450 leading-relaxed">
-                  Open your <strong>Supabase SQL Editor</strong> and run the query below to create the storage table. Once created, our engine automatically syncs state, sitemap indices, and page additions seamlessly!
+                <p className="text-[10.5px] text-zinc-400 leading-relaxed font-sans">
+                  यदि आप अपना खुद का पर्सनल Supabase डेटाबेस कनेक्ट कर रहे हैं, तो नीचे दिए गए SQL को अपने <strong>Supabase SQL Editor</strong> में रन करें। यह आपके सभी लैंडिंग पेजेज (SEO Pages), कॉन्फ़िगरेशन (Configs), सिस्टम मैप्स (Sitemaps) और लॉग्स (Logs) को पूरी तरह से व्यक्तिगत सुरक्षित एन्वायरमेंट में सिंक करेगा।
                 </p>
-                <div className="bg-[#0b0b11] border border-zinc-850 rounded p-3 text-[10px] text-cyan-300 font-mono select-all select-text break-all whitespace-pre">
-{`CREATE TABLE IF NOT EXISTS texly_storage (
-  key TEXT PRIMARY KEY,
+                <div className="bg-[#0b0b11] border border-zinc-850 rounded-lg overflow-hidden flex flex-col">
+                  <div className="bg-zinc-900/40 border-b border-zinc-850/60 px-3.5 py-2 flex justify-between items-center shrink-0">
+                    <span className="text-[10px] font-bold text-zinc-400 font-mono">multi_user_secure_schema.sql</span>
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        const code = `-- 1. Safe Isolated Client Storage Table for SEO Pages, configurations, maps and logs
+-- हमारे रिज़िलिएंट सिस्टम इंजन द्वारा प्रत्येक यूजर का डेटा पूरी तरह अलग और प्राइवेट रखा जाता है।
+CREATE TABLE IF NOT EXISTS texly_storage (
+  key TEXT PRIMARY KEY, -- Automativally partitioned (e.g. u:username:pages) for absolute privacy
   data JSONB NOT NULL
+);
+
+-- 2. Dedicated secure credentials routing table
+CREATE TABLE IF NOT EXISTS texly_users (
+  username TEXT PRIMARY KEY,
+  password TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);`;
+                        navigator.clipboard.writeText(code);
+                        setCopiedSql(true);
+                        setTimeout(() => setCopiedSql(false), 2000);
+                      }}
+                      className="text-zinc-500 hover:text-white transition duration-150 cursor-pointer text-xs flex items-center gap-1 font-mono hover:scale-105"
+                    >
+                      {copiedSql ? (
+                        <>
+                          <Check size={12} className="text-emerald-400" />
+                          <span className="text-emerald-400 text-[9.5px]">Copied! / कॉपी हुआ!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy size={12} />
+                          <span className="text-[9.5px]">Copy SQL / कोड कॉपी करें</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <div className="p-3 text-[10px] text-cyan-300 font-mono select-all select-text break-all whitespace-pre overflow-x-auto">
+{`-- 1. Safe Isolated Client Storage Table for SEO Pages, configs, maps and logs
+-- यह टेबल आपके वैयक्तिकृत पेज, क्रेडेंशियल्स, लॉग्स और मैप्स डेटा को क्लाउड में सहेजती है।
+CREATE TABLE IF NOT EXISTS texly_storage (
+  key TEXT PRIMARY KEY, -- Encoded as 'u:username:pages' or 'u:username:config' for total multi-user isolation
+  data JSONB NOT NULL
+);
+
+-- 2. Dedicated secure credentials routing table
+CREATE TABLE IF NOT EXISTS texly_users (
+  username TEXT PRIMARY KEY,
+  password TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );`}
+                  </div>
                 </div>
+                <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-[10.5px] text-emerald-400/95 leading-relaxed font-sans">
+                  🛡️ <strong>डेटा प्राइवेसी सुरक्षा गारंटी:</strong> इस एप्लिकेशन में "डबल-लेयर पैार्टिशनिंग" (Double-Layer Partitioning) लागू की गई है। यदि दो या दो से अधिक अलग यूजर्स एक ही साझा (shared Master) Supabase का उपयोग करते हैं, तो भी वे एक दूसरे का डेटा किसी भी परिस्थिति में नहीं देख सकते। प्रत्येक रिकॉर्ड के लिए यूनीक कीज़ (जैसे <code>u:username:pages</code>) जनरेट होती हैं।
+                </div>
+                <p className="text-[10.5px] text-amber-500/90 leading-relaxed font-sans font-medium">
+                  ⚠️ <strong>महत्वपूर्ण नोट:</strong> यदि आपके ब्राउज़र में ऑटो-ट्रांसलेट (हिन्दी अनुवाद) चालू है, तो कॉपी करने से पहले उसे बंद (Disable Translation) कर दें। अन्यथा अनुवादक 'IF NOT EXISTS' को बदलकर 'if open not exists' कर देता है जिससे Supabase SQL Editor में सिंटैक्स एरर आ सकता है। केवल शुद्ध इंग्लिश (English) कोड ही रन करें।
+                </p>
               </div>
             </div>
 
@@ -745,6 +879,44 @@ export default function ConfigTab({
                 </>
               )}
             </button>
+          </div>
+
+          {/* Direct Dynamic Sanitization Action */}
+          <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5 space-y-4">
+            <div className="space-y-1">
+              <h3 className="text-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                <Database size={13} className="text-cyan-400" />
+                डेटाबेस सैनिटाइजेशन (Auto-Sanitize)
+              </h3>
+              <p className="text-[11px] text-zinc-500 leading-relaxed font-sans">
+                गलत या पुराने related tool links, canonical URLs और schema configuration को Supabase और स्थानीय स्टोर पर ठीक करके सिंक करें।
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleSanitize}
+              disabled={sanitizing}
+              className="w-full flex items-center justify-center gap-2 py-3 bg-zinc-850 hover:bg-zinc-800 text-cyan-400 hover:text-cyan-300 border border-cyan-500/15 hover:border-cyan-500/40 font-bold text-xs uppercase tracking-widest font-mono rounded-lg transition disabled:opacity-40 cursor-pointer"
+            >
+              {sanitizing ? (
+                <>
+                  <RefreshCw size={13} className="animate-spin text-cyan-400" />
+                  Cleansing Matrix...
+                </>
+              ) : (
+                <>
+                  <RefreshCw size={13} />
+                  Run Self-Healing Sync
+                </>
+              )}
+            </button>
+
+            {sanitizeSuccess !== null && (
+              <div className={`p-3 rounded-lg text-[11px] leading-relaxed transition ${sanitizeSuccess ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400' : 'bg-rose-500/10 border border-rose-500/20 text-rose-400'}`}>
+                {sanitizeMessage}
+              </div>
+            )}
           </div>
 
         </div>

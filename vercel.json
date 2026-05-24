@@ -3,12 +3,12 @@
   "buildCommand": "npm run build:client",
   "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/api/auto-index", "destination": "/api/auto-index" },
-    { "source": "/api/ai/:path*", "destination": "/api/ai" },
-    { "source": "/robots.txt", "destination": "/api/robots" },
-    { "source": "/sitemap.xml", "destination": "/api/sitemap" },
-    { "source": "/api/seo-page", "destination": "/api/seo-page" },
-    { "source": "/api/(.*)", "destination": "/api/index" },
+    { "source": "/api/auto-index", "destination": "/api/index?__route__=auto-index" },
+    { "source": "/api/ai/:path*", "destination": "/api/index?__route__=ai/:path*" },
+    { "source": "/robots.txt", "destination": "/api/index?__route__=robots.txt" },
+    { "source": "/sitemap.xml", "destination": "/api/index?__route__=sitemap.xml" },
+    { "source": "/api/seo-page", "destination": "/api/index?__route__=seo-page" },
+    { "source": "/api/(.*)", "destination": "/api/index?__route__=$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "redirects": [
